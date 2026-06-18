@@ -1,0 +1,17 @@
+[Unit]
+Description=WissensDB API
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/wissensdb
+EnvironmentFile=/opt/wissensdb/.env
+ExecStart=/opt/wissensdb/.venv/bin/uvicorn wissensdb.main:app --host ${WISSENSDB_API_HOST} --port ${WISSENSDB_API_PORT}
+Restart=on-failure
+RestartSec=5
+User=wissensdb
+Group=wissensdb
+
+[Install]
+WantedBy=multi-user.target
