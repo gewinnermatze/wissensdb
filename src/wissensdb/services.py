@@ -130,6 +130,38 @@ class KnowledgeService:
         self.repository.commit()
         return item_to_out(item, project_slug=project_slug, repo_slug=repo_slug)
 
+    def reindex_scope(
+        self,
+        scope: Scope,
+        agent: AgentIdentity,
+        include_inactive: bool = False,
+    ) -> int:
+        agent.require(AgentRole.MAINTAINER)
+        project, repo = self.repository.resolve_scope(scope)
+        items = self.repository.list_items_for_scope(
+            project.id,
+            repo.id,
+            area=scope.area,
+            include_inactive=include_inactive,
+        )
+        for item in items:
+            embedding = self.embeddings.embed(f"{item.title}\n\n{item.content}")
+            self.repository.update_embedding(item, embedding, agent.agent_id)
+        self.repository.audit(
+            "knowledge.reindex",
+            agent.agent_id,
+            agent.role,
+            project_id=project.id,
+            repo_id=repo.id,
+            detail={
+                "area": scope.area,
+                "items": len(items),
+                "include_inactive": include_inactive,
+            },
+        )
+        self.repository.commit()
+        return len(items)
+
 
 def choose_status(write: KnowledgeWrite, agent: AgentIdentity) -> KnowledgeStatus:
     if not write.scope.project or not write.scope.repo:

@@ -175,3 +175,38 @@ def test_snapshot_with_pgvector_embedding_is_json_safe():
 
     assert snapshot["embedding"] == pytest.approx([0.1, 0.2, 0.3])
     json.dumps(snapshot)
+
+
+def test_reindex_scope_recomputes_embeddings_and_versions_items():
+    service, session = build_test_service()
+    service.create_project("example-project", "Example Project")
+    service.create_repo("example-project", "example-repo", "Example Repo")
+    agent = AgentIdentity(token="t", agent_id="maintainer", role=AgentRole.MAINTAINER)
+
+    created = service.write(
+        KnowledgeWrite(
+            scope=Scope(project="example-project", repo="example-repo", area="backend"),
+            type=KnowledgeType.CODE_MAP,
+            title="Search code",
+            content="Vector search lives in the repository.",
+            confidence=0.9,
+            source=KnowledgeSource(source_type="code_inspection", source_ref="test"),
+        ),
+        agent,
+    )
+    stored = session.get(KnowledgeItem, created.id)
+    assert stored is not None
+    stored.embedding = [0.0] * 64
+    session.commit()
+
+    count = service.reindex_scope(
+        Scope(project="example-project", repo="example-repo", area="backend"),
+        agent,
+    )
+
+    assert count == 1
+    reindexed = session.get(KnowledgeItem, created.id)
+    assert reindexed is not None
+    assert reindexed.version == 2
+    assert reindexed.embedding != [0.0] * 64
+    assert session.execute(text("select count(*) from knowledge_versions")).scalar_one() == 1

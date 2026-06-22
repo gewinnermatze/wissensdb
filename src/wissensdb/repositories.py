@@ -84,6 +84,27 @@ class KnowledgeRepository:
         order = {item_id: idx for idx, item_id in enumerate(ids)}
         return sorted(items, key=lambda item: order.get(item.id, 999999))
 
+    def list_items_for_scope(
+        self,
+        project_id: int,
+        repo_id: int,
+        area: str | None = None,
+        include_inactive: bool = False,
+    ) -> list[KnowledgeItem]:
+        stmt = select(KnowledgeItem).where(
+            KnowledgeItem.project_id == project_id,
+            KnowledgeItem.repo_id == repo_id,
+        )
+        if area:
+            stmt = stmt.where(KnowledgeItem.area == area)
+        if not include_inactive:
+            stmt = stmt.where(
+                KnowledgeItem.status.in_(
+                    [KnowledgeStatus.ACTIVE, KnowledgeStatus.NEEDS_REVIEW]
+                )
+            )
+        return list(self.session.scalars(stmt).all())
+
     def get_scope_slugs(self, project_id: int, repo_id: int) -> tuple[str, str]:
         row = self.session.execute(
             select(Project.slug, Repo.slug).where(
@@ -283,6 +304,13 @@ class KnowledgeRepository:
         item.version += 1
         self.session.flush()
         return item
+
+    def update_embedding(self, item: KnowledgeItem, embedding: list[float], actor: str) -> None:
+        self._save_version(item, actor)
+        item.embedding = embedding
+        item.updated_by = actor
+        item.version += 1
+        self.session.flush()
 
     def audit(
         self,

@@ -130,6 +130,14 @@ WISSENSDB_OLLAMA_EMBEDDING_MODEL=nomic-embed-text-v2-moe
 the database migration creates `knowledge_items.embedding`. For
 `nomic-embed-text-v2-moe`, keep PostgreSQL/pgvector at `vector(768)`.
 
+When switching an existing database from `hash` to a model-backed provider,
+recompute stored item embeddings after recreating the API container:
+
+```bash
+docker compose -f docker-compose.prod.yml --project-name wissensdb exec wissensdb-api \
+  wissensdb reindex repo wissensdb wissensdb --area backend
+```
+
 ### Local Build Or Bundled Database
 
 The API expects PostgreSQL with both `vector` and `timescaledb` extensions. Use an existing LAN PostgreSQL server by setting `WISSENSDB_POSTGRES_HOST` and the matching database credentials, or start the bundled database profile for local/server testing:

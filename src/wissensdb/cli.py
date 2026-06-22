@@ -14,9 +14,11 @@ app = typer.Typer(help="WissensDB admin and ingestion CLI.")
 project_app = typer.Typer(help="Manage projects.")
 repo_app = typer.Typer(help="Manage repositories.")
 scan_app = typer.Typer(help="Scan repositories.")
+reindex_app = typer.Typer(help="Recompute knowledge item embeddings.")
 app.add_typer(project_app, name="project")
 app.add_typer(repo_app, name="repo")
 app.add_typer(scan_app, name="scan")
+app.add_typer(reindex_app, name="reindex")
 
 
 def maintainer_identity() -> AgentIdentity:
@@ -77,6 +79,23 @@ def _scan(
         service.write(write, agent)
         count += 1
     typer.echo(f"scanned {count} files")
+
+
+@reindex_app.command("repo")
+def reindex_repository(
+    project: str,
+    repo: str,
+    area: str | None = typer.Option(None, "--area"),
+    include_inactive: bool = typer.Option(False, "--include-inactive"),
+):
+    with SessionLocal() as session:
+        service = build_service(session)
+        count = service.reindex_scope(
+            Scope(project=project, repo=repo, area=area),
+            maintainer_identity(),
+            include_inactive=include_inactive,
+        )
+        typer.echo(f"reindexed {count} items")
 
 
 @app.command("serve")
