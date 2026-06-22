@@ -70,11 +70,20 @@ curl -fsSLO https://raw.githubusercontent.com/gewinnermatze/wissensdb/main/.env.
 cp .env.example .env
 ```
 
-Set your LAN PostgreSQL connection in `.env`:
+Set your PostgreSQL container name or LAN host in `.env`:
 
 ```env
-WISSENSDB_DATABASE_URL=postgresql+psycopg://user:password@postgres-host:5432/wissensdb
+WISSENSDB_POSTGRES_HOST=postgres
+WISSENSDB_POSTGRES_PORT=5432
+WISSENSDB_POSTGRES_DB=wissensdb
+WISSENSDB_POSTGRES_USER=wissensdb
+WISSENSDB_POSTGRES_PASSWORD=change-me
 ```
+
+`WISSENSDB_POSTGRES_HOST` is the value that must match the PostgreSQL container
+name when both containers share a Docker network. You can still set
+`WISSENSDB_DATABASE_URL` directly if you need a fully custom connection string;
+when present it overrides the individual PostgreSQL settings.
 
 Then start the API:
 
@@ -95,7 +104,7 @@ The response should report `pgvector: true` and `timescaledb: true`.
 
 ### Local Build Or Bundled Database
 
-The API expects PostgreSQL with both `vector` and `timescaledb` extensions. Use an existing LAN PostgreSQL server by setting `WISSENSDB_DATABASE_URL`, or start the bundled database profile for local/server testing:
+The API expects PostgreSQL with both `vector` and `timescaledb` extensions. Use an existing LAN PostgreSQL server by setting `WISSENSDB_POSTGRES_HOST` and the matching database credentials, or start the bundled database profile for local/server testing:
 
 ```bash
 docker compose --profile db up -d postgres
