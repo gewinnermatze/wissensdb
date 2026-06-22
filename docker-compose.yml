@@ -1,4 +1,23 @@
 services:
+  postgres:
+    image: timescale/timescaledb-ha:pg16
+    profiles:
+      - db
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-wissensdb}
+      POSTGRES_USER: ${POSTGRES_USER:-wissensdb}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-me}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres-data:/home/postgres/pgdata/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-wissensdb} -d ${POSTGRES_DB:-wissensdb}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
   wissensdb-api:
     build: .
     env_file:
@@ -9,3 +28,6 @@ services:
     command: >
       sh -c "alembic upgrade head &&
              uvicorn wissensdb.main:app --host 0.0.0.0 --port 8080"
+
+volumes:
+  postgres-data:

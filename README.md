@@ -1,13 +1,14 @@
 # WissensDB
 
-WissensDB is a small Python/FastAPI service for scoped project knowledge that coding agents can read and maintain automatically. MariaDB stores structured knowledge, versions, roles and audit events. Qdrant stores vector embeddings for token-cheap semantic retrieval.
+WissensDB is a small Python/FastAPI service for scoped project knowledge that coding agents can read and maintain automatically. PostgreSQL stores structured knowledge, vector embeddings, versions, roles, audit events and agent event streams.
 
 ## Architecture
 
 - `FastAPI` exposes the LAN API for agents.
 - `Typer` provides the `wissensdb` CLI for setup, migrations, scans and admin tasks.
-- `MariaDB` stores projects, repos, areas, knowledge items, versions and audit events.
-- `Qdrant` stores embeddings with scope payloads.
+- `PostgreSQL` stores projects, repos, areas, knowledge items, versions and roles.
+- `pgvector` stores embeddings on `knowledge_items` for scoped semantic retrieval.
+- `TimescaleDB` stores time-series audit, ingestion and agent events as hypertables.
 - Agent access is via Bearer tokens, not direct DB access.
 
 Every read and write is scoped by `project + repo + optional area`. Ambiguous scope fails closed.
@@ -16,6 +17,7 @@ Every read and write is scoped by `project + repo + optional area`. Ambiguous sc
 
 ```bash
 cp .env.example .env
+docker compose --profile db up -d postgres
 python -m venv .venv
 . .venv/bin/activate
 pip install -e ".[dev]"
@@ -48,13 +50,16 @@ High-risk types such as `goal`, `decision` and `architecture` become `needs_revi
 
 ## Deployment
 
-Docker Compose is the recommended server deployment. A systemd+venv unit is also included in `deploy/wissensdb.service`.
+Docker Compose is the recommended API deployment. A systemd+venv unit is also included in `deploy/wissensdb.service`.
+
+The API expects PostgreSQL with both `vector` and `timescaledb` extensions. Use an existing LAN PostgreSQL server by setting `WISSENSDB_DATABASE_URL`, or start the bundled database profile for local/server testing:
 
 ```bash
-docker compose up -d --build
+docker compose --profile db up -d postgres
+docker compose up -d --build wissensdb-api
 ```
 
-The compose file expects MariaDB and Qdrant to be reachable from the service container. Adjust `.env` hostnames to your server network.
+The bundled `postgres` service uses a TimescaleDB PostgreSQL image and the migration enables both required extensions. If your PostgreSQL image does not include `pgvector`, `alembic upgrade head` fails clearly.
 
 ## Agent Skills
 

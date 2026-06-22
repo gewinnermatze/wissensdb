@@ -1,7 +1,8 @@
 from collections.abc import Iterable
+from dataclasses import dataclass
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import bindparam, select, text
 from sqlalchemy.orm import Session
 
 from wissensdb.enums import KnowledgeStatus
@@ -11,6 +12,12 @@ from wissensdb.schemas import KnowledgeSource, KnowledgeWrite, Scope
 
 class ScopeError(ValueError):
     pass
+
+
+@dataclass(frozen=True)
+class KnowledgeSearchHit:
+    item: KnowledgeItem
+    score: float | None
 
 
 class KnowledgeRepository:
@@ -76,6 +83,105 @@ class KnowledgeRepository:
         order = {item_id: idx for idx, item_id in enumerate(ids)}
         return sorted(items, key=lambda item: order.get(item.id, 999999))
 
+    def vector_search(
+        self,
+        project_id: int,
+        repo_id: int,
+        area: str | None,
+        query_vector: list[float],
+        limit: int,
+        include_needs_review: bool,
+    ) -> list[KnowledgeSearchHit]:
+        if self.session.bind and self.session.bind.dialect.name == "postgresql":
+            return self._postgres_vector_search(
+                project_id,
+                repo_id,
+                area,
+                query_vector,
+                limit,
+                include_needs_review,
+            )
+        return self._python_vector_search(
+            project_id,
+            repo_id,
+            area,
+            query_vector,
+            limit,
+            include_needs_review,
+        )
+
+    def _postgres_vector_search(
+        self,
+        project_id: int,
+        repo_id: int,
+        area: str | None,
+        query_vector: list[float],
+        limit: int,
+        include_needs_review: bool,
+    ) -> list[KnowledgeSearchHit]:
+        statuses = [KnowledgeStatus.ACTIVE.value]
+        if include_needs_review:
+            statuses.append(KnowledgeStatus.NEEDS_REVIEW.value)
+
+        area_clause = "AND area = :area" if area else ""
+        stmt = text(
+            f"""
+            SELECT id, embedding <=> CAST(:query_vector AS vector) AS score
+            FROM knowledge_items
+            WHERE project_id = :project_id
+              AND repo_id = :repo_id
+              AND embedding IS NOT NULL
+              AND status IN :statuses
+              {area_clause}
+            ORDER BY embedding <=> CAST(:query_vector AS vector)
+            LIMIT :limit
+            """
+        ).bindparams(bindparam("statuses", expanding=True))
+        rows = self.session.execute(
+            stmt,
+            {
+                "project_id": project_id,
+                "repo_id": repo_id,
+                "area": area,
+                "statuses": statuses,
+                "query_vector": vector_literal(query_vector),
+                "limit": limit,
+            },
+        ).all()
+        ids = [row.id for row in rows]
+        items = {item.id: item for item in self.get_items(ids)}
+        return [
+            KnowledgeSearchHit(item=items[row.id], score=float(row.score))
+            for row in rows
+            if row.id in items
+        ]
+
+    def _python_vector_search(
+        self,
+        project_id: int,
+        repo_id: int,
+        area: str | None,
+        query_vector: list[float],
+        limit: int,
+        include_needs_review: bool,
+    ) -> list[KnowledgeSearchHit]:
+        statuses = [KnowledgeStatus.ACTIVE]
+        if include_needs_review:
+            statuses.append(KnowledgeStatus.NEEDS_REVIEW)
+        stmt = select(KnowledgeItem).where(
+            KnowledgeItem.project_id == project_id,
+            KnowledgeItem.repo_id == repo_id,
+            KnowledgeItem.status.in_(statuses),
+            KnowledgeItem.embedding.is_not(None),
+        )
+        if area:
+            stmt = stmt.where(KnowledgeItem.area == area)
+        scored = []
+        for item in self.session.scalars(stmt).all():
+            score = cosine_distance(query_vector, item.embedding or [])
+            scored.append(KnowledgeSearchHit(item=item, score=score))
+        return sorted(scored, key=lambda hit: hit.score if hit.score is not None else 999)[:limit]
+
     def fallback_search(
         self,
         project_id: int,
@@ -109,6 +215,7 @@ class KnowledgeRepository:
         write: KnowledgeWrite,
         status: KnowledgeStatus,
         actor: str,
+        embedding: list[float] | None = None,
     ) -> KnowledgeItem:
         project, repo = self.resolve_scope(write.scope)
         if write.item_id is None:
@@ -128,6 +235,7 @@ class KnowledgeRepository:
                 line_end=write.source.line_end,
                 commit_sha=write.source.commit_sha,
                 content_hash=write.source.content_hash,
+                embedding=embedding,
                 created_by=actor,
                 updated_by=actor,
                 version=1,
@@ -150,6 +258,7 @@ class KnowledgeRepository:
             item.line_end = write.source.line_end
             item.commit_sha = write.source.commit_sha
             item.content_hash = write.source.content_hash
+            item.embedding = embedding
             item.updated_by = actor
             item.version += 1
         self.session.flush()
@@ -219,6 +328,7 @@ def item_to_snapshot(item: KnowledgeItem) -> dict[str, Any]:
         "line_end": item.line_end,
         "commit_sha": item.commit_sha,
         "content_hash": item.content_hash,
+        "embedding": item.embedding,
         "created_by": item.created_by,
         "updated_by": item.updated_by,
         "version": item.version,
@@ -235,3 +345,18 @@ def source_from_item(item: KnowledgeItem) -> KnowledgeSource:
         commit_sha=item.commit_sha,
         content_hash=item.content_hash,
     )
+
+
+def vector_literal(vector: list[float]) -> str:
+    return "[" + ",".join(f"{value:.12g}" for value in vector) + "]"
+
+
+def cosine_distance(left: list[float], right: list[float]) -> float:
+    if not left or not right:
+        return 1.0
+    dot = sum(a * b for a, b in zip(left, right, strict=False))
+    left_norm = sum(a * a for a in left) ** 0.5
+    right_norm = sum(b * b for b in right) ** 0.5
+    if not left_norm or not right_norm:
+        return 1.0
+    return 1.0 - (dot / (left_norm * right_norm))

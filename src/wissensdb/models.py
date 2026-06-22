@@ -17,6 +17,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from wissensdb.database import Base
 from wissensdb.enums import AgentRole, KnowledgeStatus, KnowledgeType
+from wissensdb.sqltypes import DEFAULT_EMBEDDING_DIMENSION, EmbeddingVector
 
 
 def enum_values(enum_cls):
@@ -109,6 +110,9 @@ class KnowledgeItem(TimestampMixin, Base):
     line_end: Mapped[int | None] = mapped_column(Integer)
     commit_sha: Mapped[str | None] = mapped_column(String(64), index=True)
     content_hash: Mapped[str | None] = mapped_column(String(64), index=True)
+    embedding: Mapped[list[float] | None] = mapped_column(
+        EmbeddingVector(DEFAULT_EMBEDDING_DIMENSION)
+    )
     created_by: Mapped[str] = mapped_column(String(120), nullable=False, index=True)
     updated_by: Mapped[str] = mapped_column(String(120), nullable=False, index=True)
     version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
@@ -160,3 +164,17 @@ class IngestionRun(Base):
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class AgentEvent(Base):
+    __tablename__ = "agent_events"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    agent_id: Mapped[str] = mapped_column(String(120), nullable=False, index=True)
+    project_id: Mapped[int | None] = mapped_column(ForeignKey("projects.id"), index=True)
+    repo_id: Mapped[int | None] = mapped_column(ForeignKey("repos.id"), index=True)
+    event_type: Mapped[str] = mapped_column(String(120), nullable=False, index=True)
+    detail: Mapped[dict[str, Any] | None] = mapped_column(JSON)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )

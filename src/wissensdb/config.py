@@ -10,9 +10,7 @@ class Settings(BaseSettings):
     env: str = "development"
     api_host: str = "0.0.0.0"
     api_port: int = 8080
-    database_url: str = "sqlite:///./wissensdb.sqlite3"
-    qdrant_url: str = "http://localhost:6333"
-    qdrant_collection: str = "wissensdb_knowledge"
+    database_url: str = "postgresql+psycopg://wissensdb:change-me@localhost:5432/wissensdb"
     embedding_provider: str = "hash"
     embedding_dimension: int = 384
     agent_tokens: str = Field(

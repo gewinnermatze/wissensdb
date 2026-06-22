@@ -6,7 +6,6 @@ from wissensdb.enums import HIGH_RISK_TYPES, AgentRole, KnowledgeStatus
 from wissensdb.models import KnowledgeItem
 from wissensdb.repositories import KnowledgeRepository, source_from_item
 from wissensdb.schemas import KnowledgeOut, KnowledgeWrite, QueryRequest, QueryResponse, Scope
-from wissensdb.vector_store import VectorStore
 
 
 class GuardrailError(ValueError):
@@ -18,11 +17,9 @@ class KnowledgeService:
         self,
         repository: KnowledgeRepository,
         embeddings: EmbeddingProvider,
-        vector_store: VectorStore,
     ) -> None:
         self.repository = repository
         self.embeddings = embeddings
-        self.vector_store = vector_store
 
     def create_project(self, slug: str, name: str, description: str | None = None):
         try:
@@ -48,20 +45,18 @@ class KnowledgeService:
         scope = Scope(project=request.project, repo=request.repo, area=request.area)
         project, repo = self.repository.resolve_scope(scope)
         query_vector = self.embeddings.embed(request.query)
-        scope_filter = {
-            "project_id": project.id,
-            "repo_id": repo.id,
-            "area": request.area,
-        }
-        vector_hits = self.vector_store.search(
+        vector_hits = self.repository.vector_search(
+            project.id,
+            repo.id,
+            request.area,
             query_vector,
-            scope_filter,
             request.limit,
             include_needs_review=request.include_needs_review,
         )
-        score_by_id = {hit.item_id: hit.score for hit in vector_hits}
-        items = self.repository.get_items(score_by_id.keys())
-        if not items:
+        if vector_hits:
+            items = [hit.item for hit in vector_hits]
+            score_by_id = {hit.item.id: hit.score for hit in vector_hits}
+        else:
             items = self.repository.fallback_search(
                 project.id,
                 repo.id,
@@ -70,6 +65,7 @@ class KnowledgeService:
                 request.limit,
                 request.include_needs_review,
             )
+            score_by_id = {}
         knowledge = [item_to_out(item, request.project, request.repo) for item in items]
         self.repository.audit(
             "knowledge.query",
@@ -90,7 +86,8 @@ class KnowledgeService:
         agent.require(AgentRole.CONTRIBUTOR)
         status = choose_status(write, agent)
         project, repo = self.repository.resolve_scope(write.scope)
-        item = self.repository.upsert_item(write, status, actor=agent.agent_id)
+        embedding = self.embeddings.embed(f"{write.title}\n\n{write.content}")
+        item = self.repository.upsert_item(write, status, actor=agent.agent_id, embedding=embedding)
         self.repository.audit(
             "knowledge.upsert",
             agent.agent_id,
@@ -101,7 +98,6 @@ class KnowledgeService:
             detail={"status": status.value, "confidence": write.confidence},
         )
         self.repository.commit()
-        self._index_item(item)
         return item_to_out(item, write.scope.project, write.scope.repo)
 
     def mark_stale(self, item_id: int, agent: AgentIdentity) -> KnowledgeOut:
@@ -116,7 +112,6 @@ class KnowledgeService:
             item_id=item.id,
         )
         self.repository.commit()
-        self.vector_store.delete(item.id)
         return item_to_out(item, project_slug="", repo_slug="")
 
     def archive(self, item_id: int, agent: AgentIdentity) -> KnowledgeOut:
@@ -131,29 +126,7 @@ class KnowledgeService:
             item_id=item.id,
         )
         self.repository.commit()
-        self.vector_store.delete(item.id)
         return item_to_out(item, project_slug="", repo_slug="")
-
-    def _index_item(self, item: KnowledgeItem) -> None:
-        if item.status not in {KnowledgeStatus.ACTIVE, KnowledgeStatus.NEEDS_REVIEW}:
-            self.vector_store.delete(item.id)
-            return
-        vector = self.embeddings.embed(f"{item.title}\n\n{item.content}")
-        self.vector_store.upsert(
-            item.id,
-            vector,
-            {
-                "project_id": item.project_id,
-                "repo_id": item.repo_id,
-                "area": item.area,
-                "status": item.status.value,
-                "type": item.type.value,
-                "source_type": item.source_type,
-                "path": item.path,
-                "commit_sha": item.commit_sha,
-                "confidence": item.confidence,
-            },
-        )
 
 
 def choose_status(write: KnowledgeWrite, agent: AgentIdentity) -> KnowledgeStatus:

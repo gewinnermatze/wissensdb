@@ -2,6 +2,10 @@
 
 OpenClaw agents should use the WissensDB HTTP API as their shared project memory.
 
+WissensDB is backed by PostgreSQL with pgvector and TimescaleDB. OpenClaw agents
+must not connect to PostgreSQL directly; all reads, writes, status changes and
+embedding updates go through the HTTP API.
+
 ## Environment
 
 - `WISSENSDB_API_URL`
@@ -9,6 +13,12 @@ OpenClaw agents should use the WissensDB HTTP API as their shared project memory
 - `WISSENSDB_PROJECT`
 - `WISSENSDB_REPO`
 - optional `WISSENSDB_AREA`
+
+## Startup Check
+
+Call `GET /health` after deployment or when diagnosing memory issues. The
+service should report PostgreSQL with `pgvector` and `timescaledb` enabled. If
+health fails, skip memory writes and report the service problem.
 
 ## Tools
 
@@ -48,6 +58,8 @@ Content-Type: application/json
 ```
 
 Use after work to persist durable knowledge. Always include source and confidence.
+Do not send embedding vectors. The WissensDB service computes and stores
+pgvector embeddings internally.
 
 ### `knowledge_mark_stale`
 

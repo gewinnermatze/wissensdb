@@ -23,12 +23,30 @@ app = FastAPI(title="WissensDB", version="0.1.0")
 
 @app.get("/health")
 def health(session: Session = Depends(get_session), settings: Settings = Depends(get_settings)):
-    session.execute(text("SELECT 1"))
+    dialect = session.bind.dialect.name if session.bind else "unknown"
+    extensions: set[str] = set()
+    if dialect == "postgresql":
+        extension_rows = session.execute(
+            text(
+                """
+                SELECT extname
+                FROM pg_extension
+                WHERE extname IN ('vector', 'timescaledb')
+                """
+            )
+        ).scalars()
+        extensions = set(extension_rows)
+    else:
+        session.execute(text("SELECT 1"))
+
     return {
         "status": "ok",
         "env": settings.env,
-        "qdrant_collection": settings.qdrant_collection,
+        "database": dialect,
+        "pgvector": "vector" in extensions,
+        "timescaledb": "timescaledb" in extensions,
         "embedding_provider": settings.embedding_provider,
+        "embedding_dimension": settings.embedding_dimension,
     }
 
 

@@ -5,10 +5,10 @@ from wissensdb.auth import AgentIdentity
 from wissensdb.database import Base
 from wissensdb.embeddings import HashEmbeddingProvider
 from wissensdb.enums import AgentRole, KnowledgeStatus, KnowledgeType
+from wissensdb.models import KnowledgeItem
 from wissensdb.repositories import KnowledgeRepository, ScopeError
 from wissensdb.schemas import KnowledgeSource, KnowledgeWrite, QueryRequest, Scope
 from wissensdb.services import KnowledgeService
-from wissensdb.vector_store import InMemoryVectorStore
 
 
 def build_test_service():
@@ -18,7 +18,6 @@ def build_test_service():
     service = KnowledgeService(
         KnowledgeRepository(session),
         HashEmbeddingProvider(64),
-        InMemoryVectorStore(),
     )
     return service, session
 
@@ -47,6 +46,9 @@ def test_write_creates_audit_and_query_returns_scoped_context():
     )
 
     assert created.status == KnowledgeStatus.ACTIVE
+    stored = session.get(KnowledgeItem, created.id)
+    assert stored is not None
+    assert stored.embedding
 
     result = service.query(
         QueryRequest(

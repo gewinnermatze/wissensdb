@@ -1,14 +1,17 @@
-"""initial schema
+"""initial postgresql schema
 
 Revision ID: 0001_initial
 Revises:
 Create Date: 2026-06-18
 """
 
+import os
 from collections.abc import Sequence
 
 import sqlalchemy as sa
 from alembic import op
+from pgvector.sqlalchemy import Vector
+from sqlalchemy.dialects import postgresql
 
 revision: str = "0001_initial"
 down_revision: str | None = None
@@ -31,10 +34,17 @@ knowledge_type = sa.Enum(
 knowledge_status = sa.Enum("active", "needs_review", "stale", "archived", name="knowledgestatus")
 
 
+def embedding_dimension() -> int:
+    return int(os.environ.get("WISSENSDB_EMBEDDING_DIMENSION", "384"))
+
+
 def upgrade() -> None:
+    op.execute("CREATE EXTENSION IF NOT EXISTS vector")
+    op.execute("CREATE EXTENSION IF NOT EXISTS timescaledb")
+
     op.create_table(
         "projects",
-        sa.Column("id", sa.Integer(), nullable=False),
+        sa.Column("id", sa.Integer(), sa.Identity(), nullable=False),
         sa.Column("slug", sa.String(length=100), nullable=False),
         sa.Column("name", sa.String(length=255), nullable=False),
         sa.Column("description", sa.Text(), nullable=True),
@@ -53,7 +63,7 @@ def upgrade() -> None:
         sa.Column("id", sa.String(length=120), nullable=False),
         sa.Column("role", agent_role, nullable=False),
         sa.Column("display_name", sa.String(length=255), nullable=True),
-        sa.Column("active", sa.Boolean(), nullable=False),
+        sa.Column("active", sa.Boolean(), server_default=sa.text("true"), nullable=False),
         sa.Column(
             "created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
         ),
@@ -65,7 +75,7 @@ def upgrade() -> None:
 
     op.create_table(
         "repos",
-        sa.Column("id", sa.Integer(), nullable=False),
+        sa.Column("id", sa.Integer(), sa.Identity(), nullable=False),
         sa.Column("project_id", sa.Integer(), nullable=False),
         sa.Column("slug", sa.String(length=120), nullable=False),
         sa.Column("name", sa.String(length=255), nullable=False),
@@ -86,7 +96,7 @@ def upgrade() -> None:
 
     op.create_table(
         "knowledge_items",
-        sa.Column("id", sa.Integer(), nullable=False),
+        sa.Column("id", sa.Integer(), sa.Identity(), nullable=False),
         sa.Column("project_id", sa.Integer(), nullable=False),
         sa.Column("repo_id", sa.Integer(), nullable=False),
         sa.Column("area", sa.String(length=120), nullable=True),
@@ -102,6 +112,7 @@ def upgrade() -> None:
         sa.Column("line_end", sa.Integer(), nullable=True),
         sa.Column("commit_sha", sa.String(length=64), nullable=True),
         sa.Column("content_hash", sa.String(length=64), nullable=True),
+        sa.Column("embedding", Vector(embedding_dimension()), nullable=True),
         sa.Column("created_by", sa.String(length=120), nullable=False),
         sa.Column("updated_by", sa.String(length=120), nullable=False),
         sa.Column("version", sa.Integer(), nullable=False),
@@ -127,10 +138,18 @@ def upgrade() -> None:
         "updated_by",
     ]:
         op.create_index(f"ix_knowledge_items_{column}", "knowledge_items", [column], unique=False)
+    op.execute(
+        """
+        CREATE INDEX ix_knowledge_items_embedding_hnsw
+        ON knowledge_items
+        USING hnsw (embedding vector_cosine_ops)
+        WHERE embedding IS NOT NULL
+        """
+    )
 
     op.create_table(
         "project_areas",
-        sa.Column("id", sa.Integer(), nullable=False),
+        sa.Column("id", sa.Integer(), sa.Identity(), nullable=False),
         sa.Column("project_id", sa.Integer(), nullable=False),
         sa.Column("repo_id", sa.Integer(), nullable=False),
         sa.Column("area", sa.String(length=120), nullable=False),
@@ -154,10 +173,10 @@ def upgrade() -> None:
 
     op.create_table(
         "knowledge_versions",
-        sa.Column("id", sa.Integer(), nullable=False),
+        sa.Column("id", sa.Integer(), sa.Identity(), nullable=False),
         sa.Column("item_id", sa.Integer(), nullable=False),
         sa.Column("version", sa.Integer(), nullable=False),
-        sa.Column("snapshot", sa.JSON(), nullable=False),
+        sa.Column("snapshot", postgresql.JSONB(), nullable=False),
         sa.Column("changed_by", sa.String(length=120), nullable=False),
         sa.Column(
             "changed_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
@@ -171,52 +190,81 @@ def upgrade() -> None:
 
     op.create_table(
         "audit_events",
-        sa.Column("id", sa.Integer(), nullable=False),
+        sa.Column("id", sa.Integer(), sa.Identity(), nullable=False),
         sa.Column("action", sa.String(length=120), nullable=False),
         sa.Column("actor", sa.String(length=120), nullable=False),
         sa.Column("role", agent_role, nullable=False),
         sa.Column("project_id", sa.Integer(), nullable=True),
         sa.Column("repo_id", sa.Integer(), nullable=True),
         sa.Column("item_id", sa.Integer(), nullable=True),
-        sa.Column("detail", sa.JSON(), nullable=True),
+        sa.Column("detail", postgresql.JSONB(), nullable=True),
         sa.Column(
             "created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
         ),
         sa.ForeignKeyConstraint(["item_id"], ["knowledge_items.id"]),
         sa.ForeignKeyConstraint(["project_id"], ["projects.id"]),
         sa.ForeignKeyConstraint(["repo_id"], ["repos.id"]),
-        sa.PrimaryKeyConstraint("id"),
+        sa.PrimaryKeyConstraint("id", "created_at"),
     )
+    op.execute("SELECT create_hypertable('audit_events', 'created_at', if_not_exists => TRUE)")
     for column in ["action", "actor", "item_id", "project_id", "repo_id"]:
         op.create_index(f"ix_audit_events_{column}", "audit_events", [column], unique=False)
 
     op.create_table(
         "ingestion_runs",
-        sa.Column("id", sa.Integer(), nullable=False),
+        sa.Column("id", sa.Integer(), sa.Identity(), nullable=False),
         sa.Column("project_id", sa.Integer(), nullable=False),
         sa.Column("repo_id", sa.Integer(), nullable=False),
         sa.Column("commit_sha", sa.String(length=64), nullable=True),
         sa.Column("status", sa.String(length=40), nullable=False),
-        sa.Column("summary", sa.JSON(), nullable=True),
+        sa.Column("summary", postgresql.JSONB(), nullable=True),
         sa.Column(
             "started_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
         ),
         sa.Column("finished_at", sa.DateTime(timezone=True), nullable=True),
         sa.ForeignKeyConstraint(["project_id"], ["projects.id"]),
         sa.ForeignKeyConstraint(["repo_id"], ["repos.id"]),
-        sa.PrimaryKeyConstraint("id"),
+        sa.PrimaryKeyConstraint("id", "started_at"),
     )
+    op.execute("SELECT create_hypertable('ingestion_runs', 'started_at', if_not_exists => TRUE)")
     op.create_index(
         op.f("ix_ingestion_runs_project_id"), "ingestion_runs", ["project_id"], unique=False
     )
     op.create_index(op.f("ix_ingestion_runs_repo_id"), "ingestion_runs", ["repo_id"], unique=False)
 
+    op.create_table(
+        "agent_events",
+        sa.Column("id", sa.Integer(), sa.Identity(), nullable=False),
+        sa.Column("agent_id", sa.String(length=120), nullable=False),
+        sa.Column("project_id", sa.Integer(), nullable=True),
+        sa.Column("repo_id", sa.Integer(), nullable=True),
+        sa.Column("event_type", sa.String(length=120), nullable=False),
+        sa.Column("detail", postgresql.JSONB(), nullable=True),
+        sa.Column(
+            "created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
+        ),
+        sa.ForeignKeyConstraint(["project_id"], ["projects.id"]),
+        sa.ForeignKeyConstraint(["repo_id"], ["repos.id"]),
+        sa.PrimaryKeyConstraint("id", "created_at"),
+    )
+    op.execute("SELECT create_hypertable('agent_events', 'created_at', if_not_exists => TRUE)")
+    op.create_index(op.f("ix_agent_events_agent_id"), "agent_events", ["agent_id"], unique=False)
+    op.create_index(
+        op.f("ix_agent_events_event_type"), "agent_events", ["event_type"], unique=False
+    )
+    op.create_index(
+        op.f("ix_agent_events_project_id"), "agent_events", ["project_id"], unique=False
+    )
+    op.create_index(op.f("ix_agent_events_repo_id"), "agent_events", ["repo_id"], unique=False)
+
 
 def downgrade() -> None:
+    op.drop_table("agent_events")
     op.drop_table("ingestion_runs")
     op.drop_table("audit_events")
     op.drop_table("knowledge_versions")
     op.drop_table("project_areas")
+    op.drop_index("ix_knowledge_items_embedding_hnsw", table_name="knowledge_items")
     op.drop_table("knowledge_items")
     op.drop_table("repos")
     op.drop_table("agents")
