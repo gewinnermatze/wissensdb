@@ -1,3 +1,8 @@
+---
+name: wissensdb
+description: Use this skill whenever working in a repository that is registered in WissensDB project memory, or when Codex needs to query or maintain scoped project knowledge through the WissensDB HTTP API, including setup notes, code maps, architecture notes, TODOs, stale knowledge and automatic source-backed writebacks.
+---
+
 # WissensDB Codex Skill
 
 Use this skill whenever working inside a project that is registered in WissensDB.

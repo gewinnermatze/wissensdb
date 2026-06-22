@@ -1,5 +1,6 @@
 from collections.abc import Iterable
 from dataclasses import dataclass
+from enum import Enum
 from typing import Any
 
 from sqlalchemy import bindparam, select, text
@@ -82,6 +83,16 @@ class KnowledgeRepository:
         items = self.session.scalars(select(KnowledgeItem).where(KnowledgeItem.id.in_(ids))).all()
         order = {item_id: idx for idx, item_id in enumerate(ids)}
         return sorted(items, key=lambda item: order.get(item.id, 999999))
+
+    def get_scope_slugs(self, project_id: int, repo_id: int) -> tuple[str, str]:
+        row = self.session.execute(
+            select(Project.slug, Repo.slug).where(
+                Project.id == project_id,
+                Repo.id == repo_id,
+                Repo.project_id == Project.id,
+            )
+        ).one()
+        return row[0], row[1]
 
     def vector_search(
         self,
@@ -304,7 +315,7 @@ class KnowledgeRepository:
             KnowledgeVersion(
                 item_id=item.id,
                 version=item.version,
-                snapshot=item_to_snapshot(item),
+                snapshot=json_safe(item_to_snapshot(item)),
                 changed_by=actor,
             )
         )
@@ -333,6 +344,22 @@ def item_to_snapshot(item: KnowledgeItem) -> dict[str, Any]:
         "updated_by": item.updated_by,
         "version": item.version,
     }
+
+
+def json_safe(value: Any) -> Any:
+    if isinstance(value, Enum):
+        return value.value
+    if isinstance(value, dict):
+        return {key: json_safe(child) for key, child in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [json_safe(child) for child in value]
+    if hasattr(value, "to_list"):
+        return json_safe(value.to_list())
+    if hasattr(value, "tolist"):
+        return json_safe(value.tolist())
+    if hasattr(value, "item") and value.__class__.__module__.startswith("numpy"):
+        return json_safe(value.item())
+    return value
 
 
 def source_from_item(item: KnowledgeItem) -> KnowledgeSource:

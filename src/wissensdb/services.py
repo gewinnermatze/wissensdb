@@ -103,6 +103,7 @@ class KnowledgeService:
     def mark_stale(self, item_id: int, agent: AgentIdentity) -> KnowledgeOut:
         agent.require(AgentRole.CONTRIBUTOR)
         item = self.repository.set_status(item_id, KnowledgeStatus.STALE, agent.agent_id)
+        project_slug, repo_slug = self.repository.get_scope_slugs(item.project_id, item.repo_id)
         self.repository.audit(
             "knowledge.mark_stale",
             agent.agent_id,
@@ -112,11 +113,12 @@ class KnowledgeService:
             item_id=item.id,
         )
         self.repository.commit()
-        return item_to_out(item, project_slug="", repo_slug="")
+        return item_to_out(item, project_slug=project_slug, repo_slug=repo_slug)
 
     def archive(self, item_id: int, agent: AgentIdentity) -> KnowledgeOut:
         agent.require(AgentRole.MAINTAINER)
         item = self.repository.set_status(item_id, KnowledgeStatus.ARCHIVED, agent.agent_id)
+        project_slug, repo_slug = self.repository.get_scope_slugs(item.project_id, item.repo_id)
         self.repository.audit(
             "knowledge.archive",
             agent.agent_id,
@@ -126,7 +128,7 @@ class KnowledgeService:
             item_id=item.id,
         )
         self.repository.commit()
-        return item_to_out(item, project_slug="", repo_slug="")
+        return item_to_out(item, project_slug=project_slug, repo_slug=repo_slug)
 
 
 def choose_status(write: KnowledgeWrite, agent: AgentIdentity) -> KnowledgeStatus:
