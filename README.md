@@ -52,6 +52,49 @@ High-risk types such as `goal`, `decision` and `architecture` become `needs_revi
 
 Docker Compose is the recommended API deployment. A systemd+venv unit is also included in `deploy/wissensdb.service`.
 
+### Install From Public Image
+
+The API image is published to GitHub Container Registry:
+
+```text
+ghcr.io/gewinnermatze/wissensdb:latest
+```
+
+On the server:
+
+```bash
+mkdir -p /opt/wissensdb
+cd /opt/wissensdb
+curl -fsSLO https://raw.githubusercontent.com/gewinnermatze/wissensdb/main/docker-compose.prod.yml
+curl -fsSLO https://raw.githubusercontent.com/gewinnermatze/wissensdb/main/.env.example
+cp .env.example .env
+```
+
+Set your LAN PostgreSQL connection in `.env`:
+
+```env
+WISSENSDB_DATABASE_URL=postgresql+psycopg://user:password@postgres-host:5432/wissensdb
+```
+
+Then start the API:
+
+```bash
+docker compose -f docker-compose.prod.yml up -d
+```
+
+By default the container runs `alembic upgrade head` before starting the API. Set
+`WISSENSDB_RUN_MIGRATIONS=false` if migrations are managed separately.
+
+Check the service:
+
+```bash
+curl http://localhost:8080/health
+```
+
+The response should report `pgvector: true` and `timescaledb: true`.
+
+### Local Build Or Bundled Database
+
 The API expects PostgreSQL with both `vector` and `timescaledb` extensions. Use an existing LAN PostgreSQL server by setting `WISSENSDB_DATABASE_URL`, or start the bundled database profile for local/server testing:
 
 ```bash
@@ -60,6 +103,18 @@ docker compose up -d --build wissensdb-api
 ```
 
 The bundled `postgres` service uses a TimescaleDB PostgreSQL image and the migration enables both required extensions. If your PostgreSQL image does not include `pgvector`, `alembic upgrade head` fails clearly.
+
+### Publishing The Image
+
+Images are built and pushed by `.github/workflows/container.yml` on every push to
+`main`, plus version tags such as `v0.1.0`. The workflow publishes:
+
+- `ghcr.io/gewinnermatze/wissensdb:latest`
+- `ghcr.io/gewinnermatze/wissensdb:sha-<commit>`
+- `ghcr.io/gewinnermatze/wissensdb:<tag>` for release tags
+
+If GitHub creates the package as private on the first run, set the package
+visibility to public once in the GitHub Container Registry package settings.
 
 ## Agent Skills
 

@@ -1,0 +1,8 @@
+services:
+  wissensdb-api:
+    image: ghcr.io/gewinnermatze/wissensdb:latest
+    env_file:
+      - .env
+    ports:
+      - "${WISSENSDB_API_PORT:-8080}:8080"
+    restart: unless-stopped

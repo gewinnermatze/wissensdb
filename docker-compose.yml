@@ -19,15 +19,13 @@ services:
     restart: unless-stopped
 
   wissensdb-api:
+    image: ghcr.io/gewinnermatze/wissensdb:local
     build: .
     env_file:
       - .env
     ports:
       - "${WISSENSDB_API_PORT:-8080}:8080"
     restart: unless-stopped
-    command: >
-      sh -c "alembic upgrade head &&
-             uvicorn wissensdb.main:app --host 0.0.0.0 --port 8080"
 
 volumes:
   postgres-data:
