@@ -123,11 +123,12 @@ Ollama on the local network:
 WISSENSDB_EMBEDDING_PROVIDER=ollama
 WISSENSDB_EMBEDDING_DIMENSION=768
 WISSENSDB_OLLAMA_URL=http://ollama:11434
-WISSENSDB_OLLAMA_EMBEDDING_MODEL=nomic-embed-text
+WISSENSDB_OLLAMA_EMBEDDING_MODEL=nomic-embed-text-v2-moe
 ```
 
 `WISSENSDB_EMBEDDING_DIMENSION` must match the selected embedding model before
-the database migration creates `knowledge_items.embedding`.
+the database migration creates `knowledge_items.embedding`. For
+`nomic-embed-text-v2-moe`, keep PostgreSQL/pgvector at `vector(768)`.
 
 ### Local Build Or Bundled Database
 

@@ -18,14 +18,14 @@ class Settings(BaseSettings):
     postgres_user: str = "wissensdb"
     postgres_password: str = "change-me"
     embedding_provider: str = "hash"
-    embedding_dimension: int = 384
+    embedding_dimension: int = 768
     agent_tokens: str = Field(
         default="agent-token-reader:reader-agent:reader,"
         "agent-token-contributor:coding-agent:contributor"
     )
     openai_embedding_model: str = "text-embedding-3-small"
     ollama_url: str = "http://ollama:11434"
-    ollama_embedding_model: str = "nomic-embed-text"
+    ollama_embedding_model: str = "nomic-embed-text-v2-moe"
 
     @property
     def resolved_database_url(self) -> str:

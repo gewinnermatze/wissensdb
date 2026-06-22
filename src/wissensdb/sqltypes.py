@@ -5,7 +5,7 @@ from sqlalchemy import JSON
 from sqlalchemy.engine import Dialect
 from sqlalchemy.types import TypeDecorator
 
-DEFAULT_EMBEDDING_DIMENSION = 384
+DEFAULT_EMBEDDING_DIMENSION = 768
 
 
 class EmbeddingVector(TypeDecorator):

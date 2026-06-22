@@ -17,7 +17,7 @@ class EmbeddingProvider(Protocol):
 class HashEmbeddingProvider:
     """Deterministic local fallback for development and tests."""
 
-    def __init__(self, dimension: int = 384) -> None:
+    def __init__(self, dimension: int = 768) -> None:
         self.dimension = dimension
 
     def embed(self, text: str) -> list[float]:

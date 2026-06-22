@@ -9,14 +9,14 @@ def test_builds_ollama_embedding_provider_from_settings():
         Settings(
             embedding_provider="ollama",
             ollama_url="http://ollama.local:11434",
-            ollama_embedding_model="nomic-embed-text",
+            ollama_embedding_model="nomic-embed-text-v2-moe",
             embedding_dimension=768,
         )
     )
 
     assert isinstance(provider, OllamaEmbeddingProvider)
     assert provider.base_url == "http://ollama.local:11434"
-    assert provider.model == "nomic-embed-text"
+    assert provider.model == "nomic-embed-text-v2-moe"
     assert provider.dimension == 768
 
 
@@ -35,7 +35,7 @@ def test_ollama_embedding_provider_calls_embeddings_endpoint(monkeypatch):
 
     provider = OllamaEmbeddingProvider(
         "http://ollama.local:11434/",
-        "nomic-embed-text",
+        "nomic-embed-text-v2-moe",
         768,
     )
 
@@ -44,7 +44,7 @@ def test_ollama_embedding_provider_calls_embeddings_endpoint(monkeypatch):
     assert requests == [
         {
             "url": "http://ollama.local:11434/api/embeddings",
-            "json": {"model": "nomic-embed-text", "prompt": "hello"},
+            "json": {"model": "nomic-embed-text-v2-moe", "prompt": "hello"},
             "timeout": 60,
         }
     ]

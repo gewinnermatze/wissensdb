@@ -35,7 +35,7 @@ knowledge_status = sa.Enum("active", "needs_review", "stale", "archived", name="
 
 
 def embedding_dimension() -> int:
-    return int(os.environ.get("WISSENSDB_EMBEDDING_DIMENSION", "384"))
+    return int(os.environ.get("WISSENSDB_EMBEDDING_DIMENSION", "768"))
 
 
 def upgrade() -> None:
