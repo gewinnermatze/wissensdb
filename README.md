@@ -102,6 +102,33 @@ curl http://localhost:8080/health
 
 The response should report `pgvector: true` and `timescaledb: true`.
 
+### Embeddings
+
+The default embedding provider is `hash`, which is local and useful for setup
+and smoke tests. For better semantic search, use one of the model-backed
+providers.
+
+OpenAI:
+
+```env
+WISSENSDB_EMBEDDING_PROVIDER=openai
+WISSENSDB_EMBEDDING_DIMENSION=1536
+OPENAI_API_KEY=...
+OPENAI_EMBEDDING_MODEL=text-embedding-3-small
+```
+
+Ollama on the local network:
+
+```env
+WISSENSDB_EMBEDDING_PROVIDER=ollama
+WISSENSDB_EMBEDDING_DIMENSION=768
+WISSENSDB_OLLAMA_URL=http://ollama:11434
+WISSENSDB_OLLAMA_EMBEDDING_MODEL=nomic-embed-text
+```
+
+`WISSENSDB_EMBEDDING_DIMENSION` must match the selected embedding model before
+the database migration creates `knowledge_items.embedding`.
+
 ### Local Build Or Bundled Database
 
 The API expects PostgreSQL with both `vector` and `timescaledb` extensions. Use an existing LAN PostgreSQL server by setting `WISSENSDB_POSTGRES_HOST` and the matching database credentials, or start the bundled database profile for local/server testing:

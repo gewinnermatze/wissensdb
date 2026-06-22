@@ -24,6 +24,8 @@ class Settings(BaseSettings):
         "agent-token-contributor:coding-agent:contributor"
     )
     openai_embedding_model: str = "text-embedding-3-small"
+    ollama_url: str = "http://ollama:11434"
+    ollama_embedding_model: str = "nomic-embed-text"
 
     @property
     def resolved_database_url(self) -> str:

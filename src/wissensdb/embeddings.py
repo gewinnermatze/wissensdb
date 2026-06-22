@@ -55,11 +55,35 @@ class OpenAIEmbeddingProvider:
         return vector
 
 
+class OllamaEmbeddingProvider:
+    def __init__(self, base_url: str, model: str, dimension: int) -> None:
+        self.base_url = base_url.rstrip("/")
+        self.model = model
+        self.dimension = dimension
+
+    def embed(self, text: str) -> list[float]:
+        response = httpx.post(
+            f"{self.base_url}/api/embeddings",
+            json={"model": self.model, "prompt": text},
+            timeout=60,
+        )
+        response.raise_for_status()
+        vector = response.json()["embedding"]
+        self.dimension = len(vector)
+        return vector
+
+
 def build_embedding_provider(settings: Settings) -> EmbeddingProvider:
     if settings.embedding_provider == "hash":
         return HashEmbeddingProvider(settings.embedding_dimension)
     if settings.embedding_provider == "openai":
         return OpenAIEmbeddingProvider(
             settings.openai_embedding_model, settings.embedding_dimension
+        )
+    if settings.embedding_provider == "ollama":
+        return OllamaEmbeddingProvider(
+            settings.ollama_url,
+            settings.ollama_embedding_model,
+            settings.embedding_dimension,
         )
     raise ValueError(f"unsupported embedding provider: {settings.embedding_provider}")
