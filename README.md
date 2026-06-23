@@ -119,8 +119,9 @@ projects:
     tokens:
       maintainer:
         codex: ${EXAMPLE_PROJECT_CODEX_TOKEN}
-      contributor:
-        worker: ${EXAMPLE_PROJECT_WORKER_TOKEN}
+      # Optional:
+      # contributor:
+      #   worker: ${EXAMPLE_PROJECT_WORKER_TOKEN}
 ```
 
 Enable it with:

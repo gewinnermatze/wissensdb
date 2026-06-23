@@ -11,7 +11,11 @@ from wissensdb.auth import (
 from wissensdb.config import Settings, get_settings
 from wissensdb.database import database_url_for_project, session_for_project, sessionmaker_for_url
 from wissensdb.enums import AgentRole
-from wissensdb.project_config import load_projects_config, project_routing_enabled
+from wissensdb.project_config import (
+    ProjectConfigError,
+    load_projects_config,
+    project_routing_enabled,
+)
 from wissensdb.repositories import ScopeError
 from wissensdb.schemas import (
     KnowledgeOut,
@@ -29,7 +33,13 @@ app = FastAPI(title="WissensDB", version="0.1.0")
 @app.get("/health")
 def health(settings: Settings = Depends(get_settings)):
     if project_routing_enabled(settings):
-        config = load_projects_config(settings)
+        try:
+            config = load_projects_config(settings)
+        except ProjectConfigError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail=f"invalid projects config: {exc}",
+            ) from exc
         return {
             "status": "ok",
             "env": settings.env,

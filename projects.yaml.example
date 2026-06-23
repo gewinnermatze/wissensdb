@@ -10,7 +10,8 @@ projects:
     tokens:
       maintainer:
         codex: ${EXAMPLE_PROJECT_CODEX_TOKEN}
-      contributor:
-        worker: ${EXAMPLE_PROJECT_WORKER_TOKEN}
-      reader:
-        readonly: ${EXAMPLE_PROJECT_READER_TOKEN}
+      # Optional:
+      # contributor:
+      #   worker: ${EXAMPLE_PROJECT_WORKER_TOKEN}
+      # reader:
+      #   readonly: ${EXAMPLE_PROJECT_READER_TOKEN}
