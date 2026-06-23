@@ -1,0 +1,16 @@
+projects:
+  example-project:
+    postgres:
+      host: postgres
+      port: 5432
+      database: example_project_db
+      user: example_project_user
+      password: ${EXAMPLE_PROJECT_DB_PASSWORD}
+
+    tokens:
+      maintainer:
+        codex: ${EXAMPLE_PROJECT_CODEX_TOKEN}
+      contributor:
+        worker: ${EXAMPLE_PROJECT_WORKER_TOKEN}
+      reader:
+        readonly: ${EXAMPLE_PROJECT_READER_TOKEN}

@@ -5,6 +5,11 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from wissensdb.config import Settings, get_settings
 from wissensdb.enums import ROLE_RANK, AgentRole
+from wissensdb.project_config import (
+    ProjectConfigError,
+    load_projects_config,
+    project_routing_enabled,
+)
 
 
 @dataclass(frozen=True)
@@ -12,6 +17,7 @@ class AgentIdentity:
     token: str
     agent_id: str
     role: AgentRole
+    project: str | None = None
 
     def require(self, role: AgentRole) -> None:
         if ROLE_RANK[self.role] < ROLE_RANK[role]:
@@ -42,19 +48,50 @@ def authenticate_token(token: str, settings: Settings) -> AgentIdentity:
     return identity
 
 
+def authenticate_project_token(token: str, project: str, settings: Settings) -> AgentIdentity:
+    if not project_routing_enabled(settings):
+        return authenticate_token(token, settings)
+    try:
+        route = load_projects_config(settings).route(project)
+    except ProjectConfigError as exc:
+        raise PermissionError(str(exc)) from exc
+    project_token = route.tokens.get(token)
+    if project_token is None:
+        raise PermissionError("invalid agent token for project")
+    return AgentIdentity(
+        token=token,
+        agent_id=project_token.agent_id,
+        role=project_token.role,
+        project=project,
+    )
+
+
+def projects_for_token(token: str, settings: Settings) -> list[str]:
+    if not project_routing_enabled(settings):
+        identity = authenticate_token(token, settings)
+        return [identity.project] if identity.project else [""]
+    return [route.slug for route in load_projects_config(settings).projects_for_token(token)]
+
+
 bearer_scheme = HTTPBearer(auto_error=False)
 
 
-def current_agent(
+def current_token(
     credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
-    settings: Settings = Depends(get_settings),
-) -> AgentIdentity:
+) -> str:
     if credentials is None or credentials.scheme.lower() != "bearer":
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="missing bearer token",
         )
+    return credentials.credentials
+
+
+def current_agent(
+    token: str = Depends(current_token),
+    settings: Settings = Depends(get_settings),
+) -> AgentIdentity:
     try:
-        return authenticate_token(credentials.credentials, settings)
+        return authenticate_token(token, settings)
     except PermissionError as exc:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(exc)) from exc

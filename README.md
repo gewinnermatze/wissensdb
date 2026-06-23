@@ -102,6 +102,51 @@ curl http://localhost:8080/health
 
 The response should report `pgvector: true` and `timescaledb: true`.
 
+### Multiple Project Databases
+
+One API container can route requests to separate PostgreSQL databases per
+project. Put the structure in `projects.yaml` and keep real secrets in `.env`.
+
+```yaml
+projects:
+  example-project:
+    postgres:
+      host: postgres
+      port: 5432
+      database: example_project_db
+      user: example_project_user
+      password: ${EXAMPLE_PROJECT_DB_PASSWORD}
+    tokens:
+      maintainer:
+        codex: ${EXAMPLE_PROJECT_CODEX_TOKEN}
+      contributor:
+        worker: ${EXAMPLE_PROJECT_WORKER_TOKEN}
+```
+
+Enable it with:
+
+```env
+WISSENSDB_PROJECTS_CONFIG=/app/projects.yaml
+WISSENSDB_PROJECTS_CONFIG_HOST=./projects.yaml
+```
+
+Validate and migrate configured project databases:
+
+```bash
+docker compose -f docker-compose.prod.yml --project-name wissensdb exec wissensdb-api \
+  wissensdb projects validate-config
+docker compose -f docker-compose.prod.yml --project-name wissensdb exec wissensdb-api \
+  wissensdb project migrate --all
+```
+
+Existing `/query` and `/items` requests keep using their `project` payload field.
+For item status changes in multi-project mode, prefer the unambiguous routes:
+
+```text
+POST /projects/{project}/items/{id}/mark-stale
+POST /projects/{project}/items/{id}/archive
+```
+
 ### Embeddings
 
 The default embedding provider is `hash`, which is local and useful for setup

@@ -11,6 +11,7 @@ class Settings(BaseSettings):
     env: str = "development"
     api_host: str = "0.0.0.0"
     api_port: int = 8080
+    projects_config: str | None = None
     database_url: str | None = None
     postgres_host: str = "postgres"
     postgres_port: int = 5432

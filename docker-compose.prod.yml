@@ -5,4 +5,6 @@ services:
       - .env
     ports:
       - "${WISSENSDB_API_PORT:-8080}:8080"
+    volumes:
+      - "${WISSENSDB_PROJECTS_CONFIG_HOST:-/dev/null}:${WISSENSDB_PROJECTS_CONFIG:-/app/projects.yaml}:ro"
     restart: unless-stopped
